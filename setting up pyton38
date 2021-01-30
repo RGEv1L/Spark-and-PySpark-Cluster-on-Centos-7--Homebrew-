@@ -1,0 +1,8 @@
+yum update
+yum install centos-release-scl epel-release
+yum install rh-python38
+scl enable rh-python38 bash
+
+
+
+

@@ -1,0 +1,148 @@
+#Requirements
+yum update
+yum install centos-release-scl epel-release
+yum install python3 wget
+yum install  java-11-openjdk java-11-openjdk-devel
+#Check Java
+java --version
+
+
+#Firewall Configs
+firewall-cmd --permanent --zone=public --add-port=6066/tcp
+firewall-cmd --permanent --zone=public --add-port=7077/tcp
+firewall-cmd --permanent --zone=public --add-port=8080-8081/tcp
+firewall-cmd --permanent --zone=public --add-port=8888/tcp
+firewall-cmd --reload
+
+#Setting Up python env for Master
+mkdir PySpark
+cd PySpark
+wget https://www.apache.org/dyn/closer.lua/spark/spark-3.0.1/spark-3.0.1-bin-hadoop3.2.tgz
+tar -xvf spark-3.0.1-bin-hadoop3.2.tgz
+rm spark-3.0.1-bin-hadoop3.2.tgz
+
+#For Master Node Only
+python3 -m venv /root/PySpark/PySparkenv
+source /root/PySpark/PySparkenv/bin/activate
+pip install --upgrade pip
+pip install pyspark jupyter jupyterlab
+jupyter notebook --generate-config
+#Setup Password for jupyter notebook
+jupyter notebook password
+
+
+
+
+#Spark Environment
+vi ~/.bash_profile
+
+#Add at the bottom
+# Apache Spark stuff
+export JAVA_HOME=/usr/lib/jvm/jre
+export SPARK_HOME=/root/PySpark
+export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+export PATH=$PATH:$SPARK_HOME/bin
+
+
+#For Master Node
+export PYSPARK_DRIVER_PYTHON=jupyter
+export PYSPARK_DRIVER_PYTHON_OPTS='notebook --allow-root --no-browser --ip=192.168.1.100 --port=8888'
+
+
+
+#Auto Start Master Spark
+cd ~
+touch sparkactivate.sh
+vi sparkactivate.sh
+
+#Copy This
+#!/usr/bin/env bash
+source ~/.bash_profile
+bash /root/PySpark/sbin/start-master.sh --ip 192.168.1.100
+source /root/PySpark/PySparkenv/bin/activate
+pyspark
+bash
+
+
+#make it executeable
+chmod +x sparkactivate.sh
+
+
+#Add it as a system service
+vi /etc/systemd/system/sparkmaster.service
+
+#Add into file
+[Unit]
+Description=Description for sample script goes here
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/root/sparkactivate.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target
+
+
+#Enable Daemon
+systemctl daemon-reload
+systemctl enable sparkmaster.service
+systemctl start sparkmaster.service
+
+
+
+
+
+
+
+
+
+#Spark Slave Autostart Configuration
+vi sparkslave.sh
+
+#Add this
+#!/usr/bin/env bash
+source ~/.bash_profile
+su -c './root/PySpark/sbin/start-slave.sh spark://192.168.1.100:7077' 
+bash
+
+#make it executable
+chmod +x /root/sparkslave.sh
+
+#Add it as a system service
+vi /etc/systemd/system/sparkslave.service
+
+#add to file
+[Unit]
+Description=Spark Slave auto start
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/root/sparkslave.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target
+
+
+#Enable Daemon
+systemctl daemon-reload
+systemctl enable sparkslave.service
+systemctl start sparkslave.service
+
+#For Both Master and Slave
+#cd to PySpark/conf/spark-env-sh and add
+SPARK_MASTER_HOST='192.168.1.100'
+SPARK_LOCAL_IP='192.168.1.100'
+SPARK_MASTER_IP='192.168.1.100'
+
+#Reboot Master and then slave
+#Check Master @ 192.168.1.100:8080
+#Check jupyter @ 192.168.1.100:8888
+
+
+
+
+
